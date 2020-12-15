@@ -20,18 +20,18 @@ openvino_plugin_dir = os.environ["INTEL_OPENVINO_DIR"] + "/inference_engine/lib/
 
 
 def testThread(nt, rddata):
-    if nt.duration_seconds == 0 and nt.niter == 0:
-        return
-    if nt.duration_seconds > 0 and nt.niter == -1:
+    if nt.duration_seconds > 0 or nt.niter > 0:
+        nt.infer(rddata)
+    elif nt.duration_seconds > 0 and nt.niter == -1:
         time.sleep(nt.duration_seconds)
-        return
-    nt.infer(rddata)
+    
     if not nt.no_del:
+        print(nt.name, "Deleted")
         del(nt.exec_network)
 
 class NetworkTest:
     def __init__(self, ie, device: str, duration_seconds, number_iter, \
-            number_infer_requests, api_type, scheduler, stream_id, no_del):
+            number_infer_requests, api_type, config, no_del):
         self.device = device.upper()
         self.ie = ie
         self.nireq_set = number_infer_requests
@@ -39,8 +39,8 @@ class NetworkTest:
         self.niter = number_iter
         self.duration_seconds = duration_seconds
         self.api_type = api_type
-        self.scheduler = scheduler
-        self.stream_id = stream_id
+        self.scheduler = "default"
+        self.config = config
         self.no_del = no_del
         self.device_number_streams = {}
         self.input_info = None
@@ -78,25 +78,25 @@ class NetworkTest:
                 input_info[key].precision = 'U8'
 
         self.input_info = input_info
-
+        net_config_list = self.config.split(':')
         config = {'PERF_COUNT': 'NO'}
 
-        tag = bind = prio = ""
-        if self.scheduler == 'bypass':
-            st = self.stream_id.split(':')
-            tag = st[0]
-            bind = st[1] if len(st) > 1 else 'NO'
-            prio = st[2] if len(st) > 2 else '0'
+        if self.device == "HDDL" and len(net_config_list) > 0:
+            self.scheduler = net_config_list[0]
+            tag = net_config_list[1] if len(net_config_list) > 1 else 'null'
+            bind = net_config_list[2] if len(net_config_list) > 2 else 'NO'
+            prio = net_config_list[3] if len(net_config_list) > 3 else '0'
 
-        scheduler_config = {'default': None, \
-            'squeeze': None, \
-            'bypass': {'HDDL_DEVICE_TAG':tag,'HDDL_BIND_DEVICE':bind,'HDDL_RUNTIME_PRIORITY':prio}, \
-            'tag': {'HDDL_GRAPH_TAG':self.stream_id}, \
-            'stream': {'HDDL_STREAM_ID':self.stream_id}, \
-            'sgad': {'HDDL_USE_SGAD':'YES'}, \
-            None: None}
-        if scheduler_config[self.scheduler] != None:
-            config.update(scheduler_config[self.scheduler])
+            scheduler_config = { \
+                'default': None, \
+                'squeeze': None, \
+                'bypass': {'HDDL_DEVICE_TAG':tag, 'HDDL_BIND_DEVICE':bind,  'HDDL_RUNTIME_PRIORITY':prio}, \
+                'tag':    {'HDDL_GRAPH_TAG' :tag  }, \
+                'stream': {'HDDL_STREAM_ID' :tag  }, \
+                'sgad':   {'HDDL_USE_SGAD'  :'YES'}, \
+                None: None}
+            if scheduler_config[self.scheduler] != None:
+                config.update(scheduler_config[self.scheduler])
         #print(config)
 
         exe_network = self.ie.load_network(ie_network,
@@ -217,12 +217,13 @@ class NetworkTest:
         return requests_input_data
 
     def print_performance(self):
-        print('====================================')
-        print('Model:      {}'.format(self.name))
-        print('Count:      {} iterations'.format(self.iteration))
-        print('Duration:   {:.2f} ms'.format(self.total_duration_sec*1000))
-        print('Latency:    {:.2f} ms'.format(self.latency_ms))
-        print('Throughput: {:.2f} FPS'.format(self.fps))
+        #print('====================================')
+        print('Model:      {}  '.format(self.name))
+        print('Count:      {} iterations  '.format(self.iteration))
+        print('Duration:   {:.2f} ms  '.format(self.total_duration_sec*1000))
+        print('Latency:    {:.2f} ms  '.format(self.latency_ms))
+        print('Throughput: {:.2f} FPS  '.format(self.fps))
+        print('  ')
 
     def start(self):
         self.thrd = threading.Thread(target=testThread, args=(self, self.random_inputs()))
@@ -239,8 +240,7 @@ def main():
     parser.add_argument('-t', '--time', type=int, nargs='*', default=[], help='test duration')
     parser.add_argument('-n', '--num', type=int, nargs='*', default=[], help='number of infer request')
     parser.add_argument('-i', '--iteration', type=int, nargs='*', default=[], help='number of iterations')
-    parser.add_argument('-s', '--hddl_scheduler', type=str, nargs='+', default=[], help='network scheduler')
-    parser.add_argument('--stream_id', type=str, nargs='*', default=[], help='network stream id for stream scheduler')
+    parser.add_argument('-c', '--config', type=str, nargs='*', default=[], help='network config')
     parser.add_argument('--no_del', action='store_true', default=False, help='disables delete exec_net')
     args = parser.parse_args()
     if args.model == None:
@@ -252,8 +252,7 @@ def main():
     number_infer_requests = args.num
     iteration = args.iteration
     network_list = args.model
-    hddl_scheduler = args.hddl_scheduler
-    stream_id = args.stream_id
+    config = args.config
     no_del = args.no_del
 
     #sys.exit()
@@ -269,10 +268,9 @@ def main():
         duration = 0 if i >= len(duration_seconds) else duration_seconds[i]
         nireq = 0 if i >= len(number_infer_requests) else number_infer_requests[i]
         niter = 0 if i >= len(iteration) else iteration[i]
-        scheduler = None if i >= len(hddl_scheduler) else hddl_scheduler[i]
-        sid = 0 if i >= len(stream_id) else stream_id[i]
+        cfg = "" if i >= len(config) else config[i]
         
-        test = NetworkTest(ie, device, duration, niter, nireq, "async", scheduler, sid, no_del)
+        test = NetworkTest(ie, device, duration, niter, nireq, "async", cfg, no_del)
         test.load_network(net)
         test_list.append(test)
 
