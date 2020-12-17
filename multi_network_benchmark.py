@@ -88,6 +88,7 @@ class NetworkTest:
             prio = net_config_list[3] if len(net_config_list) > 3 else '0'
 
             scheduler_config = { \
+                '': None, \
                 'default': None, \
                 'squeeze': None, \
                 'bypass': {'HDDL_DEVICE_TAG':tag, 'HDDL_BIND_DEVICE':bind,  'HDDL_RUNTIME_PRIORITY':prio}, \
