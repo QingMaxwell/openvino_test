@@ -202,3 +202,26 @@ Throughput: 81.47 FPS
 
 **"bypass_device_number":4**  
 **python3 multi_network_benchmark.py -d HDDL --model resnet-50-pytorch.xml yolo-v3-tiny-tf.xml mobilenet-v3-small-1.0-224-tf.xml resnet-50-pytorch.xml -t 30 30 30 0 -n 16 16 16 0 -c bypass:dev0:NO:0 bypass:dev1:NO:0 bypass:dev2:NO:0 bypass:dev3:NO:0**  
+Model:      resnet-50-pytorch.xml  
+Count:      1824 iterations  
+Duration:   30410.76 ms  
+Latency:    254.66 ms  
+Throughput: 59.98 FPS  
+  
+Model:      yolo-v3-tiny-tf.xml  
+Count:      1408 iterations  
+Duration:   30464.70 ms  
+Latency:    333.21 ms  
+Throughput: 46.22 FPS  
+  
+Model:      mobilenet-v3-small-1.0-224-tf.xml  
+Count:      2560 iterations  
+Duration:   30230.57 ms  
+Latency:    104.85 ms  
+Throughput: 84.68 FPS  
+  
+Model:      resnet-50-pytorch.xml  
+Count:      0 iterations  
+Duration:   0.00 ms  
+Latency:    0.00 ms  
+Throughput: 0.00 FPS  
